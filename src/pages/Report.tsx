@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { addMonths, endOfMonth, format, parseISO, startOfMonth } from 'date-fns';
-import { ArrowLeft, Download, Printer } from 'lucide-react';
+import { ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Download, Printer } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { DbTask, useTimelineStore } from '@/store/timelineStore';
 import ReportTimelinePreview from '@/components/ReportTimelinePreview';
 import { formatBuddhistDate } from '@/lib/date-format';
@@ -18,6 +19,99 @@ const getMonthStart = (monthValue: string) => startOfMonth(parseISO(`${monthValu
 const getMonthEnd = (monthValue: string) => endOfMonth(parseISO(`${monthValue}-01`));
 
 const getMaxEndMonthValue = (monthValue: string) => getMonthValue(addMonths(getMonthStart(monthValue), 5));
+
+const THAI_MONTHS = [
+  'มกราคม',
+  'กุมภาพันธ์',
+  'มีนาคม',
+  'เมษายน',
+  'พฤษภาคม',
+  'มิถุนายน',
+  'กรกฎาคม',
+  'สิงหาคม',
+  'กันยายน',
+  'ตุลาคม',
+  'พฤศจิกายน',
+  'ธันวาคม',
+];
+
+interface MonthPickerProps {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  min?: string;
+  max?: string;
+}
+
+const MonthPicker = ({ id, label, value, onChange, min, max }: MonthPickerProps) => {
+  const selectedMonth = getMonthStart(value);
+  const [open, setOpen] = useState(false);
+  const [viewYear, setViewYear] = useState(selectedMonth.getFullYear());
+
+  useEffect(() => {
+    if (open) setViewYear(selectedMonth.getFullYear());
+  }, [open, selectedMonth]);
+
+  const handleSelectMonth = (monthIndex: number) => {
+    const nextValue = getMonthValue(new Date(viewYear, monthIndex, 1));
+    if ((min && nextValue < min) || (max && nextValue > max)) return;
+    onChange(nextValue);
+    setOpen(false);
+  };
+
+  return (
+    <div className="space-y-1">
+      <label htmlFor={id} className="block text-xs font-semibold text-muted-foreground">
+        {label}
+      </label>
+      <Popover open={open} onOpenChange={setOpen}>
+        <PopoverTrigger asChild>
+          <Button
+            id={id}
+            type="button"
+            variant="outline"
+            className="h-10 min-w-[180px] justify-between rounded-full px-4 text-sm font-semibold"
+          >
+            {THAI_MONTHS[selectedMonth.getMonth()]} {formatBuddhistDate(selectedMonth, 'yyyy')}
+            <CalendarDays className="h-4 w-4 text-muted-foreground" />
+          </Button>
+        </PopoverTrigger>
+        <PopoverContent className="w-[320px] p-3" align="start">
+          <div className="mb-3 flex items-center justify-between">
+            <Button type="button" variant="ghost" size="icon" onClick={() => setViewYear((year) => year - 1)}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div className="text-sm font-semibold">พ.ศ. {formatBuddhistDate(new Date(viewYear, 0, 1), 'yyyy')}</div>
+            <Button type="button" variant="ghost" size="icon" onClick={() => setViewYear((year) => year + 1)}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {THAI_MONTHS.map((month, monthIndex) => {
+              const monthValue = getMonthValue(new Date(viewYear, monthIndex, 1));
+              const disabled = Boolean((min && monthValue < min) || (max && monthValue > max));
+              const selected = monthValue === value;
+
+              return (
+                <Button
+                  key={month}
+                  type="button"
+                  variant={selected ? 'default' : 'ghost'}
+                  className="justify-center"
+                  disabled={disabled}
+                  onClick={() => handleSelectMonth(monthIndex)}
+                >
+                  {month}
+                </Button>
+              );
+            })}
+          </div>
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+};
 
 const escapeCsvValue = (value: string | number | null | undefined) => {
   const text = String(value ?? '');
@@ -36,6 +130,8 @@ const downloadCsv = (filename: string, rows: string[][]) => {
   document.body.removeChild(link);
   URL.revokeObjectURL(url);
 };
+
+const formatCsvDate = (date: Date) => `\t${formatBuddhistDate(date)}`;
 
 const Report = () => {
   const navigate = useNavigate();
@@ -129,9 +225,9 @@ const Report = () => {
         task.description || '',
         task.assigned_user_id ? profileById.get(task.assigned_user_id) || 'ไม่ระบุชื่อ' : '',
         STATUS_LABELS[task.status],
-        formatBuddhistDate(parseISO(task.start_date)),
-        formatBuddhistDate(parseISO(task.end_date)),
-        task.completed_at ? formatBuddhistDate(parseISO(task.completed_at)) : '',
+        formatCsvDate(parseISO(task.start_date)),
+        formatCsvDate(parseISO(task.end_date)),
+        task.completed_at ? formatCsvDate(parseISO(task.completed_at)) : '',
       ]),
     ];
 
@@ -142,32 +238,20 @@ const Report = () => {
     <div className="report-page min-h-screen bg-[radial-gradient(circle_at_top,_hsl(var(--primary)/0.08),_transparent_38%),linear-gradient(180deg,_hsl(var(--background)),_hsl(var(--muted)/0.45))] px-6 py-8 [font-family:'Noto_Sans_Thai',var(--font-sans)]">
       <div className="report-toolbar mx-auto flex max-w-[1180px] items-center justify-between gap-4 pb-6">
         <div className="report-period-controls flex flex-wrap items-end gap-3">
-          <div className="space-y-1">
-            <label htmlFor="report-start-month" className="block text-xs font-semibold text-muted-foreground">
-              เดือนเริ่มต้น
-            </label>
-            <input
-              id="report-start-month"
-              type="month"
-              value={startMonth}
-              onChange={(event) => handleStartMonthChange(event.target.value)}
-              className="h-10 rounded-full border border-border bg-background px-4 text-sm font-semibold text-foreground outline-none transition-colors hover:border-primary/40 focus:border-primary"
-            />
-          </div>
-          <div className="space-y-1">
-            <label htmlFor="report-end-month" className="block text-xs font-semibold text-muted-foreground">
-              เดือนสิ้นสุด
-            </label>
-            <input
-              id="report-end-month"
-              type="month"
-              value={endMonth}
-              onChange={(event) => handleEndMonthChange(event.target.value)}
-              min={startMonth}
-              max={maxEndMonth}
-              className="h-10 rounded-full border border-border bg-background px-4 text-sm font-semibold text-foreground outline-none transition-colors hover:border-primary/40 focus:border-primary"
-            />
-          </div>
+          <MonthPicker
+            id="report-start-month"
+            label="เดือนเริ่มต้น"
+            value={startMonth}
+            onChange={handleStartMonthChange}
+          />
+          <MonthPicker
+            id="report-end-month"
+            label="เดือนสิ้นสุด"
+            value={endMonth}
+            min={startMonth}
+            max={maxEndMonth}
+            onChange={handleEndMonthChange}
+          />
         </div>
 
         <div className="report-toolbar-actions flex items-center gap-2">
@@ -177,7 +261,7 @@ const Report = () => {
           </Button>
           <Button variant="outline" className="gap-2" onClick={handleExportCsv} disabled={reportData.scheduledTasks.length === 0}>
             <Download size={16} />
-            ส่งออก CSV
+            ดาวน์โหลดข้อมูล
           </Button>
           <Button className="gap-2" onClick={() => window.print()}>
             <Printer size={16} />
