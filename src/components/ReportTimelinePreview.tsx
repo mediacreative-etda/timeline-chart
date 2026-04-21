@@ -26,6 +26,7 @@ const ReportTimelinePreview = ({ tasks, profiles, rangeStart, rangeEnd, asOfDate
         enableEditing={false}
         enableTaskPopover={false}
         statusAsOfDate={asOfDate}
+        showInactiveAsCompleted
         showTodayMarker={false}
         density={density}
         className="report-timeline-grid h-full rounded-[28px] border border-border bg-card"

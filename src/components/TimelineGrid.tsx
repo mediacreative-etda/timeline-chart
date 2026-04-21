@@ -147,6 +147,7 @@ interface TimelineGridProps {
   className?: string;
   density?: TimelineDensity;
   showTodayMarker?: boolean;
+  showInactiveAsCompleted?: boolean;
 }
 
 const TimelineGrid = ({
@@ -162,6 +163,7 @@ const TimelineGrid = ({
   className,
   density = 'default',
   showTodayMarker = true,
+  showInactiveAsCompleted = false,
 }: TimelineGridProps = {}) => {
   const config = densityConfigs[density];
   const store = useTimelineStore();
@@ -543,12 +545,14 @@ const TimelineGrid = ({
                   const lane = taskLanes.get(task.id) || 0;
                   const top = 6 + lane * (config.taskHeight + config.taskGap);
                   const showTaskTitle = width >= (density === 'default' ? 36 : density === 'report-1m' ? 28 : 22);
+                  const displayStatus = getTaskDisplayStatus(task, statusAsOfDate);
+                  const taskStyleStatus = showInactiveAsCompleted && displayStatus === 'inactive' ? 'completed' : displayStatus;
                   const taskBar = (
                     <div
                       className={cn(
                         'absolute rounded-lg flex items-center px-3 transition-shadow z-10 shadow-sm hover:shadow-md',
                         enableTaskPopover && 'cursor-pointer',
-                        statusStyles[getTaskDisplayStatus(task, statusAsOfDate)]
+                        statusStyles[taskStyleStatus]
                       )}
                       style={{ left, width, top, height: config.taskHeight, paddingLeft: config.taskPaddingX, paddingRight: config.taskPaddingX }}
                       onClick={enableTaskPopover ? () => handleTaskClick(task.id) : undefined}

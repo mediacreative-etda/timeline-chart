@@ -1,37 +1,80 @@
 import { useEffect, useMemo, useState } from 'react';
-import { endOfMonth, format, startOfMonth, subMonths } from 'date-fns';
-import { ArrowLeft, Printer } from 'lucide-react';
+import { addMonths, endOfMonth, format, parseISO, startOfMonth } from 'date-fns';
+import { ArrowLeft, Download, Printer } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
 import { DbTask, useTimelineStore } from '@/store/timelineStore';
 import ReportTimelinePreview from '@/components/ReportTimelinePreview';
 import { formatBuddhistDate } from '@/lib/date-format';
-
-type PeriodKey = '1m' | '3m' | '6m';
-
-const periodOptions: { key: PeriodKey; label: string; months: number }[] = [
-  { key: '1m', label: 'เดือนที่ผ่านมา', months: 1 },
-  { key: '3m', label: '3 เดือนล่าสุด', months: 3 },
-  { key: '6m', label: '6 เดือนล่าสุด', months: 6 },
-];
+import { STATUS_LABELS } from '@/types/timeline';
 
 const intersectsRange = (task: DbTask, start: Date, end: Date) =>
   task.start_date <= format(end, 'yyyy-MM-dd') && task.end_date >= format(start, 'yyyy-MM-dd');
 
+const getMonthValue = (date: Date) => format(date, 'yyyy-MM');
+
+const getMonthStart = (monthValue: string) => startOfMonth(parseISO(`${monthValue}-01`));
+
+const getMonthEnd = (monthValue: string) => endOfMonth(parseISO(`${monthValue}-01`));
+
+const getMaxEndMonthValue = (monthValue: string) => getMonthValue(addMonths(getMonthStart(monthValue), 5));
+
+const escapeCsvValue = (value: string | number | null | undefined) => {
+  const text = String(value ?? '');
+  return `"${text.replace(/"/g, '""')}"`;
+};
+
+const downloadCsv = (filename: string, rows: string[][]) => {
+  const csv = rows.map((row) => row.map(escapeCsvValue).join(',')).join('\r\n');
+  const blob = new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+};
+
 const Report = () => {
   const navigate = useNavigate();
   const { tasks, profiles, fetchTasks, fetchProfiles, loading } = useTimelineStore();
-  const [period, setPeriod] = useState<PeriodKey>('1m');
+  const defaultMonthValue = useMemo(() => getMonthValue(new Date()), []);
+  const [startMonth, setStartMonth] = useState(defaultMonthValue);
+  const [endMonth, setEndMonth] = useState(defaultMonthValue);
 
   useEffect(() => {
     fetchTasks();
     fetchProfiles();
   }, [fetchProfiles, fetchTasks]);
 
-  const selectedPeriod = periodOptions.find((option) => option.key === period) || periodOptions[0];
-  const rangeEnd = endOfMonth(subMonths(new Date(), 1));
-  const rangeStart = startOfMonth(subMonths(rangeEnd, selectedPeriod.months - 1));
+  const handleStartMonthChange = (value: string) => {
+    if (!value) return;
+    const nextMaxEndMonth = getMaxEndMonthValue(value);
+    setStartMonth(value);
+    if (value > endMonth) {
+      setEndMonth(value);
+    } else if (endMonth > nextMaxEndMonth) {
+      setEndMonth(nextMaxEndMonth);
+    }
+  };
+
+  const handleEndMonthChange = (value: string) => {
+    if (!value) return;
+    const maxEndMonth = getMaxEndMonthValue(startMonth);
+    if (value < startMonth) {
+      setEndMonth(startMonth);
+    } else if (value > maxEndMonth) {
+      setEndMonth(maxEndMonth);
+    } else {
+      setEndMonth(value);
+    }
+  };
+
+  const maxEndMonth = getMaxEndMonthValue(startMonth);
+  const rangeStart = getMonthStart(startMonth);
+  const rangeEnd = getMonthEnd(endMonth);
 
   const reportData = useMemo(() => {
     const scheduledTasks = tasks.filter((task) => intersectsRange(task, rangeStart, rangeEnd));
@@ -62,31 +105,79 @@ const Report = () => {
     };
   }, [profiles, rangeEnd, rangeStart, tasks]);
 
+  const handleExportCsv = () => {
+    const profileById = new Map(profiles.map((profile) => [profile.user_id, profile.display_name || 'ไม่ระบุชื่อ']));
+    const sortedTasks = [...reportData.scheduledTasks].sort((a, b) => {
+      const startCompare = a.start_date.localeCompare(b.start_date);
+      if (startCompare !== 0) return startCompare;
+
+      const endCompare = a.end_date.localeCompare(b.end_date);
+      if (endCompare !== 0) return endCompare;
+
+      const assigneeA = a.assigned_user_id ? profileById.get(a.assigned_user_id) || '' : '';
+      const assigneeB = b.assigned_user_id ? profileById.get(b.assigned_user_id) || '' : '';
+      const assigneeCompare = assigneeA.localeCompare(assigneeB, 'th');
+      if (assigneeCompare !== 0) return assigneeCompare;
+
+      return a.title.localeCompare(b.title, 'th');
+    });
+
+    const rows = [
+      ['ชื่องาน', 'รายละเอียด', 'ผู้รับผิดชอบ', 'สถานะ', 'วันที่เริ่ม', 'วันที่สิ้นสุด', 'วันที่เสร็จสิ้น'],
+      ...sortedTasks.map((task) => [
+        task.title,
+        task.description || '',
+        task.assigned_user_id ? profileById.get(task.assigned_user_id) || 'ไม่ระบุชื่อ' : '',
+        STATUS_LABELS[task.status],
+        formatBuddhistDate(parseISO(task.start_date)),
+        formatBuddhistDate(parseISO(task.end_date)),
+        task.completed_at ? formatBuddhistDate(parseISO(task.completed_at)) : '',
+      ]),
+    ];
+
+    downloadCsv(`task-report-${startMonth}-to-${endMonth}.csv`, rows);
+  };
+
   return (
     <div className="report-page min-h-screen bg-[radial-gradient(circle_at_top,_hsl(var(--primary)/0.08),_transparent_38%),linear-gradient(180deg,_hsl(var(--background)),_hsl(var(--muted)/0.45))] px-6 py-8 [font-family:'Noto_Sans_Thai',var(--font-sans)]">
       <div className="report-toolbar mx-auto flex max-w-[1180px] items-center justify-between gap-4 pb-6">
-        <div className="report-period-controls flex flex-wrap items-center gap-2">
-          {periodOptions.map((option) => (
-            <button
-              key={option.key}
-              type="button"
-              onClick={() => setPeriod(option.key)}
-              className={cn(
-                'rounded-full border px-4 py-2 text-sm font-semibold transition-colors',
-                period === option.key
-                  ? 'border-primary bg-primary text-primary-foreground'
-                  : 'border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground'
-              )}
-            >
-              {option.label}
-            </button>
-          ))}
+        <div className="report-period-controls flex flex-wrap items-end gap-3">
+          <div className="space-y-1">
+            <label htmlFor="report-start-month" className="block text-xs font-semibold text-muted-foreground">
+              เดือนเริ่มต้น
+            </label>
+            <input
+              id="report-start-month"
+              type="month"
+              value={startMonth}
+              onChange={(event) => handleStartMonthChange(event.target.value)}
+              className="h-10 rounded-full border border-border bg-background px-4 text-sm font-semibold text-foreground outline-none transition-colors hover:border-primary/40 focus:border-primary"
+            />
+          </div>
+          <div className="space-y-1">
+            <label htmlFor="report-end-month" className="block text-xs font-semibold text-muted-foreground">
+              เดือนสิ้นสุด
+            </label>
+            <input
+              id="report-end-month"
+              type="month"
+              value={endMonth}
+              onChange={(event) => handleEndMonthChange(event.target.value)}
+              min={startMonth}
+              max={maxEndMonth}
+              className="h-10 rounded-full border border-border bg-background px-4 text-sm font-semibold text-foreground outline-none transition-colors hover:border-primary/40 focus:border-primary"
+            />
+          </div>
         </div>
 
         <div className="report-toolbar-actions flex items-center gap-2">
           <Button variant="outline" className="gap-2" onClick={() => navigate('/')}>
             <ArrowLeft size={16} />
             กลับสู่ไทม์ไลน์
+          </Button>
+          <Button variant="outline" className="gap-2" onClick={handleExportCsv} disabled={reportData.scheduledTasks.length === 0}>
+            <Download size={16} />
+            ส่งออก CSV
           </Button>
           <Button className="gap-2" onClick={() => window.print()}>
             <Printer size={16} />
