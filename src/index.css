@@ -321,6 +321,34 @@
     height: 100% !important;
   }
 
+  .report-timeline-grid .bg-status-not-started {
+    background-color: hsl(var(--status-not-started)) !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    forced-color-adjust: none;
+  }
+
+  .report-timeline-grid .bg-status-in-progress {
+    background-color: hsl(var(--status-in-progress)) !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    forced-color-adjust: none;
+  }
+
+  .report-timeline-grid .bg-status-completed {
+    background-color: hsl(var(--status-completed)) !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    forced-color-adjust: none;
+  }
+
+  .report-timeline-grid .bg-status-inactive {
+    background-color: hsl(var(--status-inactive)) !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    forced-color-adjust: none;
+  }
+
   .report-timeline-grid .sticky {
     position: static !important;
   }
