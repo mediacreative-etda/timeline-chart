@@ -1,7 +1,7 @@
-import { fetchApprovalRecords } from "../src/integrations/approvals/client";
-import { mapApprovalToTask } from "../src/integrations/approvals/mapApprovalToTask";
+import { fetchApprovalRecords } from "../src/integrations/approvals/client.js";
+import { mapApprovalToTask } from "../src/integrations/approvals/mapApprovalToTask.js";
 import type { ApprovalSyncResult } from "../src/integrations/approvals/types";
-import { createSupabaseAdminClient } from "../src/integrations/supabase/admin";
+import { createSupabaseAdminClient } from "../src/integrations/supabase/admin.js";
 
 const json = (res: any, status: number, body: unknown) => {
   res.status(status).json(body);
