@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Plus, UserPlus, LogOut, Settings, FileSpreadsheet } from 'lucide-react';
+import { Plus, UserPlus, LogOut, Settings, FileSpreadsheet, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
@@ -7,6 +7,7 @@ import { useTimelineStore } from '@/store/timelineStore';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
+import { useToast } from '@/hooks/use-toast';
 
 interface TimelineHeaderProps {
   onAddTask: () => void;
@@ -14,10 +15,54 @@ interface TimelineHeaderProps {
 }
 
 const TimelineHeader = ({ onAddTask, onAddMember }: TimelineHeaderProps) => {
-  const { user, signOut } = useAuth();
+  const { session, user, signOut } = useAuth();
   const navigate = useNavigate();
-  const { maxOverlap, setMaxOverlap } = useTimelineStore();
+  const { fetchTasks, maxOverlap, setMaxOverlap } = useTimelineStore();
+  const { toast } = useToast();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [syncingApprovals, setSyncingApprovals] = useState(false);
+
+  const syncApprovals = async () => {
+    if (!session?.access_token) {
+      toast({
+        title: 'ไม่สามารถซิงก์ได้',
+        description: 'กรุณาเข้าสู่ระบบก่อนซิงก์ข้อมูลงาน',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setSyncingApprovals(true);
+
+    try {
+      const response = await fetch('/api/sync-approvals', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      });
+      const result = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(result?.error ?? 'ไม่สามารถซิงก์ข้อมูลงานได้');
+      }
+
+      await fetchTasks();
+
+      toast({
+        title: 'ซิงก์ข้อมูลงานแล้ว',
+        description: `ดึง ${result?.fetched ?? 0} รายการ, อัปเดต ${result?.upserted ?? 0}, ลบ ${result?.deleted ?? 0}, ข้าม ${result?.skipped?.length ?? 0}`,
+      });
+    } catch (error) {
+      toast({
+        title: 'ซิงก์ไม่สำเร็จ',
+        description: error instanceof Error ? error.message : 'เกิดข้อผิดพลาดระหว่างซิงก์ข้อมูลงาน',
+        variant: 'destructive',
+      });
+    } finally {
+      setSyncingApprovals(false);
+    }
+  };
 
   return (
     <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-card">
@@ -29,6 +74,16 @@ const TimelineHeader = ({ onAddTask, onAddMember }: TimelineHeaderProps) => {
       <div className="flex items-center gap-3">
         {user ? (
           <>
+            <Button
+              onClick={syncApprovals}
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              disabled={syncingApprovals}
+            >
+              <RefreshCw size={16} className={syncingApprovals ? 'animate-spin' : ''} />
+              {syncingApprovals ? 'กำลังซิงก์...' : 'ซิงก์งาน'}
+            </Button>
             <Button onClick={() => navigate('/report')} size="sm" variant="outline" className="gap-1.5">
               <FileSpreadsheet size={16} />
               รายงาน

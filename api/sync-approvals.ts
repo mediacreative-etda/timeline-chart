@@ -12,23 +12,29 @@ const getHeader = (req: any, name: string) => {
   return Array.isArray(value) ? value[0] : value;
 };
 
-const assertAuthorized = (req: any) => {
-  if (req.method === "GET") {
-    const expectedCronSecret = process.env.CRON_SECRET;
-    if (!expectedCronSecret) {
-      throw new Error("Missing server environment variable: CRON_SECRET");
+const assertAuthorized = async (
+  req: any,
+  supabase: ReturnType<typeof createSupabaseAdminClient>
+) => {
+  const providedSecret = getHeader(req, "x-sync-secret");
+  if (providedSecret) {
+    const expectedSecret = process.env.APPROVALS_SYNC_SECRET;
+    if (!expectedSecret) {
+      throw new Error("Missing server environment variable: APPROVALS_SYNC_SECRET");
     }
 
-    return getHeader(req, "authorization") === `Bearer ${expectedCronSecret}`;
+    return providedSecret === expectedSecret;
   }
 
-  const expectedSecret = process.env.APPROVALS_SYNC_SECRET;
-  if (!expectedSecret) {
-    throw new Error("Missing server environment variable: APPROVALS_SYNC_SECRET");
+  const authorization = getHeader(req, "authorization");
+  const token = authorization?.startsWith("Bearer ") ? authorization.slice("Bearer ".length) : null;
+
+  if (!token) {
+    return false;
   }
 
-  const providedSecret = getHeader(req, "x-sync-secret");
-  return providedSecret === expectedSecret;
+  const { data, error } = await supabase.auth.getUser(token);
+  return !error && Boolean(data.user);
 };
 
 const normalizeName = (value?: string | null) => value?.trim().toLowerCase() ?? "";
@@ -52,19 +58,20 @@ const fetchAssigneeLookup = async (supabase: ReturnType<typeof createSupabaseAdm
 };
 
 export default async function handler(req: any, res: any) {
-  if (!["GET", "POST"].includes(req.method)) {
-    res.setHeader("Allow", "GET, POST");
-    return json(res, 405, { error: "Method not allowed. Use GET or POST." });
+  if (req.method !== "POST") {
+    res.setHeader("Allow", "POST");
+    return json(res, 405, { error: "Method not allowed. Use POST." });
   }
 
   try {
-    if (!assertAuthorized(req)) {
+    const supabase = createSupabaseAdminClient();
+
+    if (!(await assertAuthorized(req, supabase))) {
       return json(res, 401, { error: "Unauthorized sync request" });
     }
 
     const records = await fetchApprovalRecords();
     const isDryRun = req.query?.dryRun === "true";
-    const supabase = createSupabaseAdminClient();
     const assigneeLookup = await fetchAssigneeLookup(supabase);
     const syncedAt = new Date().toISOString();
     const mapped = records.map((record) =>
