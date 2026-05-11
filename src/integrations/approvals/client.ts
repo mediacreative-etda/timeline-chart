@@ -8,8 +8,8 @@ const mockApprovalRecords: ApprovalApiRecord[] = [
     requesterName: "Requester Name",
     requesterDepartment: "Corporate Communications",
     assignedName: "Nattapong Worapivut",
-    startDate: new Date().toISOString(),
-    dueDate: new Date().toISOString(),
+    startDate: "2026-05-11",
+    dueDate: "2026-05-15",
     status: "อยู่ระหว่างดำเนินการ",
   },
   {
@@ -19,8 +19,8 @@ const mockApprovalRecords: ApprovalApiRecord[] = [
     requesterName: "Requester Name",
     requesterDepartment: "Corporate Communications",
     assignedName: "Nattanai Roudreiw",
-    startDate: new Date().toISOString(),
-    dueDate: new Date().toISOString(),
+    startDate: "2026-05-13",
+    dueDate: "2026-05-20",
     status: "เสร็จสิ้น",
   },
   {
@@ -30,8 +30,8 @@ const mockApprovalRecords: ApprovalApiRecord[] = [
     requesterName: "Requester Name",
     requesterDepartment: "Corporate Communications",
     assignedName: "Napadol Utsanaboonsiri",
-    startDate: new Date().toISOString(),
-    dueDate: new Date().toISOString(),
+    startDate: "2026-05-16",
+    dueDate: "2026-05-18",
     status: "ยกเลิก",
   },
   {
@@ -40,8 +40,8 @@ const mockApprovalRecords: ApprovalApiRecord[] = [
     description: "Temporary mock data for testing lead assignment skip.",
     requesterName: "Requester Name",
     requesterDepartment: "Corporate Communications",
-    startDate: new Date().toISOString(),
-    dueDate: new Date().toISOString(),
+    startDate: "2026-05-18",
+    dueDate: "2026-05-22",
     status: "รอหัวหน้ามอบหมายงาน",
   },
 ];
@@ -90,3 +90,4 @@ export const fetchApprovalRecords = async (): Promise<ApprovalApiRecord[]> => {
 
   throw new Error("Approvals API response must be an array, records array, or items array");
 };
+
